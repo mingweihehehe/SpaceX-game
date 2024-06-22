@@ -1,0 +1,254 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SpaceX Landing Game</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+        }
+        #gameOverlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            display: none;
+            font-size: 24px;
+        }
+        button {
+            font-size: 20px;
+            padding: 10px 20px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="gameOverlay">
+        <h2 id="gameResult"></h2>
+        <button id="restartButton">Restart</button>
+    </div>
+    <!-- Add audio elements for sound effects -->
+    <audio id="thrustSound" src="thrust.mp3" preload="auto"></audio>
+    <audio id="successSound" src="success.mp3" preload="auto"></audio>
+    <audio id="failureSound" src="failure.mp3" preload="auto"></audio>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const overlay = document.getElementById('gameOverlay');
+        const resultText = document.getElementById('gameResult');
+        const restartButton = document.getElementById('restartButton');
+
+        // Audio elements
+        const thrustSound = document.getElementById('thrustSound');
+        const successSound = document.getElementById('successSound');
+        const failureSound = document.getElementById('failureSound');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let rocket = {
+            x: canvas.width / 2,
+            y: 50,
+            width: 30,
+            height: 60,
+            velocity: 0,
+            thrust: 0
+        };
+
+        let camera = {
+            y: 0
+        };
+
+        const gravity = 0.1;
+        const thrustPower = 0.2;
+        const safeVelocity = 2;
+        let worldHeight;
+        let gameOver = false;
+
+        let clouds = [];
+        let trees = [];
+
+        function generateWorld() {
+            worldHeight = Math.random() * 3000 + 3000; // Random world height between 3000 and 6000
+            generateClouds();
+            generateTrees();
+        }
+
+        function generateClouds() {
+            clouds = [];
+            const cloudCount = Math.floor(Math.random() * 15) + 10; // Random number of clouds between 10 and 24
+            for (let i = 0; i < cloudCount; i++) {
+                clouds.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * worldHeight,
+                    width: Math.random() * 100 + 50,
+                    height: Math.random() * 50 + 25
+                });
+            }
+        }
+
+        function generateTrees() {
+            trees = [];
+            const treeCount = Math.floor(Math.random() * 30) + 20; // Random number of trees between 20 and 49
+            for (let i = 0; i < treeCount; i++) {
+                trees.push({
+                    x: Math.random() * canvas.width,
+                    y: worldHeight - Math.random() * 500,
+                    width: Math.random() * 40 + 20,
+                    height: Math.random() * 100 + 50
+                });
+            }
+        }
+
+        function handleInput(event) {
+            if (gameOver) return;
+
+            if (event.type === 'keydown' && event.code === 'Space' || event.type === 'touchstart') {
+                rocket.thrust = thrustPower;
+                if (thrustSound.paused) {
+                    thrustSound.play();
+                }
+            } else if (event.type === 'keyup' && event.code === 'Space' || event.type === 'touchend') {
+                rocket.thrust = 0;
+                thrustSound.pause();
+                thrustSound.currentTime = 0;
+            }
+        }
+
+        document.addEventListener('keydown', handleInput);
+        document.addEventListener('keyup', handleInput);
+        canvas.addEventListener('touchstart', handleInput);
+        canvas.addEventListener('touchend', handleInput);
+
+        function update() {
+            if (gameOver) return;
+
+            rocket.velocity += gravity;
+            rocket.velocity -= rocket.thrust;
+            rocket.y += rocket.velocity;
+
+            camera.y = Math.max(0, rocket.y - canvas.height / 2);
+
+            if (rocket.y + rocket.height >= worldHeight) {
+                rocket.y = worldHeight - rocket.height; // Prevent rocket from going through the ground
+                if (rocket.velocity < safeVelocity) {
+                    showOverlay("U WIN! 🎉", successSound);
+                } else {
+                    showOverlay("Crash landing! 💥", failureSound);
+                }
+                gameOver = true;
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw sky
+            ctx.fillStyle = 'lightblue';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw clouds
+            ctx.fillStyle = 'white';
+            clouds.forEach(cloud => {
+                if (cloud.y - camera.y > -cloud.height && cloud.y - camera.y < canvas.height) {
+                    ctx.fillRect(cloud.x, cloud.y - camera.y, cloud.width, cloud.height);
+                }
+            });
+
+            // Draw rocket
+            drawRocket();
+
+            // Draw thrust
+            if (rocket.thrust > 0) {
+                ctx.fillStyle = 'orange';
+                ctx.beginPath();
+                ctx.moveTo(rocket.x - rocket.width / 4, rocket.y + rocket.height - camera.y);
+                ctx.lineTo(rocket.x + rocket.width / 4, rocket.y + rocket.height - camera.y);
+                ctx.lineTo(rocket.x, rocket.y + rocket.height + 20 - camera.y);
+                ctx.fill();
+            }
+
+            // Draw trees
+            ctx.fillStyle = 'green';
+            trees.forEach(tree => {
+                if (tree.y - camera.y > -tree.height && tree.y - camera.y < canvas.height) {
+                    ctx.fillRect(tree.x, tree.y - camera.y, tree.width, tree.height);
+                }
+            });
+
+            // Draw ground
+            ctx.fillStyle = 'brown';
+            ctx.fillRect(0, worldHeight - camera.y, canvas.width, canvas.height);
+
+            // Draw velocity
+            ctx.fillStyle = 'black';
+            ctx.font = '16px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`Velocity: ${rocket.velocity.toFixed(2)}`, 10, 20);
+
+            // Draw signature
+            ctx.fillStyle = 'black';
+            ctx.font = '18px Arial';
+            ctx.textAlign = 'right';
+            ctx.fillText('mingwei&claude co-created', canvas.width - 10, 20);
+        }
+
+        function drawRocket() {
+            // Draw rocket body
+            ctx.fillStyle = 'gray';
+            ctx.fillRect(rocket.x - rocket.width / 2, rocket.y - camera.y, rocket.width, rocket.height);
+
+            // Draw rocket nose
+            ctx.fillStyle = 'red';
+            ctx.beginPath();
+            ctx.moveTo(rocket.x - rocket.width / 2, rocket.y - camera.y);
+            ctx.lineTo(rocket.x + rocket.width / 2, rocket.y - camera.y);
+            ctx.lineTo(rocket.x, rocket.y - 20 - camera.y);
+            ctx.closePath();
+            ctx.fill();
+
+            // Draw SPACEX text on rocket
+            ctx.fillStyle = 'white';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('SPACEX', rocket.x, rocket.y - camera.y + rocket.height / 2);
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function showOverlay(message, sound) {
+            resultText.innerHTML = message;
+            overlay.style.display = 'block';
+            sound.play();
+        }
+
+        function resetGame() {
+            generateWorld();
+            rocket.y = 50;
+            rocket.velocity = 0;
+            camera.y = 0;
+            overlay.style.display = 'none';
+            gameOver = false;
+        }
+
+        restartButton.addEventListener('click', resetGame);
+
+        generateWorld();
+        gameLoop();
+    </script>
+</body>
+</html>
+    
